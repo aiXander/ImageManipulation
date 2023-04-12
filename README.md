@@ -1,5 +1,6 @@
 # ImageManipulation
 A collection of various scripts for image manipulation
+Required libraries: `torch, PIL, cv2, numpy`
 
 ## 1. compute_shortest_visual_path.py
   - grabs all images from a directory
