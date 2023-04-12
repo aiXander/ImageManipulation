@@ -9,4 +9,4 @@ A collection of various scripts for image manipulation
   - saves resulting trajectory to subdir /reordered
   
 usage example:
-`python compute_shortest_visual_path.py /path/to/images`
+  `python compute_shortest_visual_path.py /path/to/images`
