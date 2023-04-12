@@ -156,7 +156,7 @@ def main(directory):
     paths_and_tensors = load_images(directory, args.target_n_pixels)
     filenames = [t[0] for t in paths_and_tensors]
 
-    print(f"Computing {len(filenames)**2} pairwise perceptual distances. This may take a while..")
+    print(f"Computing pairwise perceptual distances for {len(filenames)} images. This may take a while..")
     start_time = time.time()
     pairwise_distances = compute_pairwise_lpips(paths_and_tensors)
     distance_matrix = create_distance_matrix(pairwise_distances, filenames)
