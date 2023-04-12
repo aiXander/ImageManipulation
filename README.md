@@ -11,4 +11,4 @@ Required libraries: `torch, PIL, cv2, numpy`
   
 usage example:
 
-  `python compute_shortest_visual_path.py /path/to/images`
+  `python compute_shortest_visual_path.py /path/to/img_dir`

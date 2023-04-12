@@ -7,18 +7,22 @@ import torch
 import numpy as np
 import cv2
 from torchvision.transforms import ToTensor, ToPILImage
-
-## python -m pip install tsp_solver2
-from tsp_solver.greedy import solve_tsp
-
+from tqdm import tqdm
 
 global device
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+## pip install einops
+from einops import rearrange
+
+## python -m pip install tsp_solver2
+from tsp_solver.greedy import solve_tsp
+
+## pip install lpips
 import lpips
 lpips_perceptor = lpips.LPIPS(net='alex').eval().to(device)    # lpips model options: 'squeeze', 'vgg', 'alex'
 
-from einops import rearrange
+##### helper functions #####
 
 def load_img(img_path, mode='RGB'):
     try:
@@ -81,8 +85,6 @@ def perceptual_distance(img1, img2, resize_target_pixels_before_computing_lpips 
 
     return perceptual_distance
 
-
-
 def get_uniformly_sized_crops(imgs, target_n_pixels):
     """
     Given a list of images:
@@ -112,6 +114,8 @@ def get_uniformly_sized_crops(imgs, target_n_pixels):
     
     return resized_imgs
 
+################################################################################
+
 
 def load_images(directory, target_size = int(768*1.5*768)):
     images, image_paths = [], []
@@ -126,8 +130,6 @@ def load_images(directory, target_size = int(768*1.5*768)):
 
     print(f"Loaded {len(images)} images from {directory}")
     return list(zip(image_paths, image_tensors))
-
-from tqdm import tqdm
 
 def compute_pairwise_lpips(image_tensors):
     pairwise_distances = {}
@@ -201,6 +203,7 @@ if __name__ == "__main__":
 
     
     '''
+    
     import argparse
     parser = argparse.ArgumentParser(description="Compute shortest visual path through images in a directory")
     parser.add_argument("directory", type=str, help="Directory containing images")
