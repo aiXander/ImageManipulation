@@ -188,6 +188,8 @@ def main(directory):
                 print(f"Copying {json_filepath} to {outdir}")
                 shutil.copy(json_filepath, os.path.join(outdir, new_name.replace(".jpg", ".json")))
 
+    print(f"\nAll done! ---> {len(path_indices)} reordered images saved to {outdir}")
+
 if __name__ == "__main__":
     '''
     This script takes a directory of images and computes the shortest visual path through them using Traveling Salesman Solver
@@ -203,7 +205,7 @@ if __name__ == "__main__":
 
     
     '''
-    
+
     import argparse
     parser = argparse.ArgumentParser(description="Compute shortest visual path through images in a directory")
     parser.add_argument("directory", type=str, help="Directory containing images")
