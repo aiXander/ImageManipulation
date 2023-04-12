@@ -1,2 +1,3 @@
 lpips
 tsp_solver2
+einops
