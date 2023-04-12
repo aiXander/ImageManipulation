@@ -117,7 +117,7 @@ def get_uniformly_sized_crops(imgs, target_n_pixels):
 ################################################################################
 
 
-def load_images(directory, target_size = int(768*1.5*768)):
+def load_images(directory, target_size):
     images, image_paths = [], []
     for filename in os.listdir(directory):
         if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
@@ -155,7 +155,7 @@ def create_distance_matrix(pairwise_distances, filenames):
     return distance_matrix
 
 def main(directory):
-    paths_and_tensors = load_images(directory)
+    paths_and_tensors = load_images(directory, args.target_n_pixels)
     filenames = [t[0] for t in paths_and_tensors]
 
     print(f"Computing {len(filenames)**2} pairwise perceptual distances. This may take a while..")
@@ -212,5 +212,6 @@ if __name__ == "__main__":
     parser.add_argument("--optim_steps", type=int, default=6, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
     parser.add_argument("--image_extensions", type=str, default=".jpg,.png,.jpeg", help="Comma separated list of image extensions to consider")
     parser.add_argument("--copy_metadata_files", action="store_true", help="If set, will copy any metadata files (e.g. .json) to the output directory")
+    parser.add_argument("--target_n_pixels", type=int, default=1024*1024, help="Target number of pixels for output images (script will resize and crop images)")
     args = parser.parse_args()
     main(args.directory)
