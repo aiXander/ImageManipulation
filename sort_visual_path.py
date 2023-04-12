@@ -198,7 +198,7 @@ if __name__ == "__main__":
     pip install tsp_solver2 lpips
 
     example usage:
-    python compute_shortest_visual_path.py /path/to/images
+    python sort_visual_path.py /path/to/images
 
     This script computes all pairwise perceptual distances between images in the directory, and then solves the traveling salesman problem using the greedy algorithm.
     This means its runtime is quadratic with respect to the number of images in the directory. For large directories, this may be prohibitively slow.

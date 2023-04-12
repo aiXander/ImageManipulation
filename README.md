@@ -2,7 +2,7 @@
 A collection of various scripts for image manipulation
 Required libraries: `torch, PIL, cv2, numpy`
 
-## 1. compute_shortest_visual_path.py
+## 1. sort_visual_path.py
   - grabs all images from a directory
   - applies the best fitting common crop to all the images
   - computes all pairwise perceptual distances using [lpips](https://github.com/richzhang/PerceptualSimilarity)
@@ -11,4 +11,4 @@ Required libraries: `torch, PIL, cv2, numpy`
   
 usage example:
 
-  `python compute_shortest_visual_path.py /path/to/img_dir`
+  `python sort_visual_path.py /path/to/img_dir`
