@@ -4,13 +4,13 @@ import os, shutil
 import itertools
 from PIL import Image
 import torch
+import numpy as np
+import cv2
 from torchvision.transforms import ToTensor, ToPILImage
 
 ## python -m pip install tsp_solver2
 from tsp_solver.greedy import solve_tsp
 
-import numpy as np
-import cv2
 
 global device
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -161,7 +161,7 @@ def main(directory):
     distance_matrix = create_distance_matrix(pairwise_distances, filenames)
 
     print("Solving traveling salesman problem...")
-    path_indices = solve_tsp(distance_matrix, optim_steps=6, endpoints=None)
+    path_indices = solve_tsp(distance_matrix, optim_steps=args.optim_steps, endpoints=None)
     path = [filenames[idx] for idx in path_indices]
 
     outdir = os.path.join(directory, "reordered")
@@ -170,15 +170,21 @@ def main(directory):
     print(f"Saving optimal visual walkthrough to {outdir}")
     for i, index in enumerate(path_indices):
         original_img_path = paths_and_tensors[index][0]
-        json_filepath = original_img_path.replace(".jpg", ".json")
         image_pt_tensor = paths_and_tensors[index][1]
-        new_name = f"{i:05d}.jpg"
+        new_name = f"{i:05d}_{os.path.basename(original_img_path)}.jpg"
 
         pil_image = ToPILImage()(image_pt_tensor.squeeze(0))
         pil_image.save(os.path.join(outdir, new_name))
 
-        if os.path.exists(json_filepath):
-            shutil.copy(json_filepath, os.path.join(outdir, new_name.replace(".jpg", ".json")))
+        if args.copy_metadata_files:
+            # replace extension with .json
+            json_filepath = original_img_path
+            for ext in args.image_extensions:
+                json_filepath = json_filepath.replace(ext, ".json")
+
+            if os.path.exists(json_filepath):
+                print(f"Copying {json_filepath} to {outdir}")
+                shutil.copy(json_filepath, os.path.join(outdir, new_name.replace(".jpg", ".json")))
 
 if __name__ == "__main__":
     '''
@@ -190,10 +196,16 @@ if __name__ == "__main__":
     example usage:
     python compute_shortest_visual_path.py /path/to/images
 
+    This script computes all pairwise perceptual distances between images in the directory, and then solves the traveling salesman problem using the greedy algorithm.
+    This means its runtime is quadratic with respect to the number of images in the directory. For large directories, this may be prohibitively slow.
+
     
     '''
     import argparse
     parser = argparse.ArgumentParser(description="Compute shortest visual path through images in a directory")
     parser.add_argument("directory", type=str, help="Directory containing images")
+    parser.add_argument("--optim_steps", type=int, default=6, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
+    parser.add_argument("--image_extensions", type=str, default=".jpg,.png,.jpeg", help="Comma separated list of image extensions to consider")
+    parser.add_argument("--copy_metadata_files", action="store_true", help="If set, will copy any metadata files (e.g. .json) to the output directory")
     args = parser.parse_args()
     main(args.directory)
