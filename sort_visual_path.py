@@ -1,11 +1,9 @@
-import sys
-sys.path.append('..')
 import os, shutil
 import itertools
+import time
 from PIL import Image
 import torch
 import numpy as np
-import cv2
 from torchvision.transforms import ToTensor, ToPILImage
 from tqdm import tqdm
 
@@ -109,8 +107,8 @@ def get_uniformly_sized_crops(imgs, target_n_pixels):
     final_h, final_w = int(final_h), int(final_w)
 
     # Resize images
-    resized_imgs = [cv2.resize(crop, (final_w, final_h), cv2.INTER_CUBIC) for crop in crops]
-    resized_imgs = [Image.fromarray(img) for img in resized_imgs]
+    resized_imgs = [Image.fromarray(img) for img in crops]
+    resized_imgs = [img.resize((final_w, final_h), Image.LANCZOS) for img in resized_imgs]    
     
     return resized_imgs
 
@@ -159,12 +157,16 @@ def main(directory):
     filenames = [t[0] for t in paths_and_tensors]
 
     print(f"Computing {len(filenames)**2} pairwise perceptual distances. This may take a while..")
+    start_time = time.time()
     pairwise_distances = compute_pairwise_lpips(paths_and_tensors)
     distance_matrix = create_distance_matrix(pairwise_distances, filenames)
+    print(f"Finished computing pairwise distances in {time.time() - start_time:.2f} seconds")
 
     print("Solving traveling salesman problem...")
+    start_time = time.time()
     path_indices = solve_tsp(distance_matrix, optim_steps=args.optim_steps, endpoints=None)
     path = [filenames[idx] for idx in path_indices]
+    print(f"Finished solving TSP in {time.time() - start_time:.2f} seconds")
 
     outdir = os.path.join(directory, "reordered")
     os.makedirs(outdir, exist_ok=True)
@@ -209,7 +211,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Compute shortest visual path through images in a directory")
     parser.add_argument("directory", type=str, help="Directory containing images")
-    parser.add_argument("--optim_steps", type=int, default=6, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
+    parser.add_argument("--optim_steps", type=int, default=20, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
     parser.add_argument("--image_extensions", type=str, default=".jpg,.png,.jpeg", help="Comma separated list of image extensions to consider")
     parser.add_argument("--copy_metadata_files", action="store_true", help="If set, will copy any metadata files (e.g. .json) to the output directory")
     parser.add_argument("--target_n_pixels", type=int, default=1024*1024, help="Target number of pixels for output images (script will resize and crop images)")
