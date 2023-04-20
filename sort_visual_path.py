@@ -22,7 +22,7 @@ from tsp_solver.greedy import solve_tsp
 import lpips
 lpips_perceptor = lpips.LPIPS(net='alex').eval().to(device)    # lpips model options: 'squeeze', 'vgg', 'alex'
 
-##### helper functions #####
+################# helper functions #####################
 
 def load_img(img_path, mode='RGB'):
     try:
@@ -140,7 +140,7 @@ def load_images(directory, target_size):
     return list(zip(image_paths, image_tensors))
 
 
-def compute_pairwise_lpips(image_tensors, batch_size=32):
+def compute_pairwise_lpips(image_tensors, batch_size=4):
     pairwise_distances = {}
     num_combinations = len(image_tensors) * (len(image_tensors) - 1) // 2
     progress_bar = tqdm(total=num_combinations, desc="Computing pairwise LPIPS")
@@ -231,7 +231,10 @@ def main(args):
 if __name__ == "__main__":
     '''
     This script takes a directory of images and computes the shortest visual path through them using Traveling Salesman Solver
-    Outputs will be saved to a new directory called "reordered" in the input directory
+    The reordered output images will be saved to a new directory called "reordered" in the input directory
+
+    TODO:
+    - add a mode that just copies the original image files in the new order
 
     requires:
     pip install tsp_solver2 lpips
@@ -241,13 +244,12 @@ if __name__ == "__main__":
 
     This script computes all pairwise perceptual distances between images in the directory, and then solves the traveling salesman problem using the greedy algorithm.
     This means its runtime is quadratic with respect to the number of images in the directory. For large directories, this may be prohibitively slow.
-
-    
-    '''
+    If you want to speed things up, you can run this algorithm on subsets of the images, and then stitch the results together.
+    ''' 
 
     parser = argparse.ArgumentParser(description="Compute shortest visual path through images in a directory")
     parser.add_argument("directory", type=str, help="Directory containing images")
-    parser.add_argument("--optim_steps", type=int, default=100, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
+    parser.add_argument("--optim_steps", type=int, default=1000, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
     parser.add_argument("--image_extensions", type=str, default=".jpg,.png,.jpeg", help="Comma separated list of image extensions to consider")
     parser.add_argument("--copy_metadata_files", action="store_true", help="If set, will copy any metadata files (e.g. .json) to the output directory")
     parser.add_argument("--target_n_pixels", type=int, default=768*768, help="Target number of pixels for output images (script will resize and crop images)")
