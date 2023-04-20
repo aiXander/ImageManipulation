@@ -117,7 +117,7 @@ def get_uniformly_sized_crops(imgs, target_n_pixels):
 
 def load_images(directory, target_size):
     images, image_paths = [], []
-    for filename in os.listdir(directory):
+    for filename in tqdm(os.listdir(directory)):
         if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             image_paths.append(os.path.join(directory, filename))
     
@@ -134,6 +134,7 @@ def compute_pairwise_lpips(image_tensors):
     num_combinations = len(image_tensors) * (len(image_tensors) - 1) // 2
     progress_bar = tqdm(total=num_combinations, desc="Computing pairwise LPIPS")
 
+    # This loop is a bit slow, but it avoids going OOM for large img sets
     for img1, img2 in itertools.combinations(image_tensors, 2):
         dist = perceptual_distance(img1[1].to(device), img2[1].to(device))
         pairwise_distances[(img1[0], img2[0])] = dist
@@ -195,6 +196,7 @@ def main(directory):
 if __name__ == "__main__":
     '''
     This script takes a directory of images and computes the shortest visual path through them using Traveling Salesman Solver
+    Outputs will be saved to a new directory called "reordered" in the input directory
 
     requires:
     pip install tsp_solver2 lpips
