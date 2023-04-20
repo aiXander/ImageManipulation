@@ -1,10 +1,12 @@
 import os, shutil
 import itertools
 import time
+import argparse
 from PIL import Image
 import torch
 import numpy as np
 from torchvision.transforms import ToTensor, ToPILImage
+import torch.nn.functional as F
 from tqdm import tqdm
 
 global device
@@ -46,12 +48,12 @@ def get_centre_crop(img, aspect_ratio):
         crop = img[top:bottom, :]
     return crop
 
-
-def resize(img, target_w, mode = "bilinear"):
-    b,c,h,w = img.shape
+@torch.no_grad()
+def resize_batch(images, target_w):
+    b,c,h,w = images.shape
     target_h = int(target_w * h / w)
-    resized = torch.nn.functional.interpolate(img, size=(target_h, target_w), mode=mode)
-    return resized
+    return F.interpolate(images, size=(target_h, target_w), mode='bilinear', align_corners=False)
+
 
 def prep_pt_img_for_clip(pt_img, clip_preprocessor):
     # This is a bit hacky and can be optimized, but turn the PyTorch img back into a PIL image, since that's what the preprocessor expects:
@@ -63,27 +65,27 @@ def prep_pt_img_for_clip(pt_img, clip_preprocessor):
     return clip_img
 
 @torch.no_grad()
-def perceptual_distance(img1, img2, resize_target_pixels_before_computing_lpips = 768):
+def perceptual_distance(batch_img1, batch_img2, resize_target_pixels_before_computing_lpips=768):
+    """
+    Returns perceptual distance between batch_img1 and batch_img2.
+    This function assumes batch_img1 and batch_img2 are in the range [0, 1].
+    By default, images are resized to a fixed resolution before computing the LPIPS score.
+    """
 
-    '''
-    returns perceptual distance between img1 and img2
-    This function assumes img1 and img2 are [0,1]
-    By default, images are resized to a fixed resolution before computing the lpips score
-    '''
-    minv1, minv2 = img1.min().item(), img2.min().item()
+    minv1, minv2 = batch_img1.min().item(), batch_img2.min().item()
     minv = min(minv1, minv2)
     if minv < 0:
-        print("WARNING: perceptual_distance() assumes images are in [0,1] range.  minv1: %.3f | minv2: %.3f" %(minv1, minv2))
+        print("WARNING: perceptual_distance() assumes images are in [0,1] range.  minv1: %.3f | minv2: %.3f" % (minv1, minv2))
 
     if resize_target_pixels_before_computing_lpips > 0:
-        img1, img2 = resize(img1, resize_target_pixels_before_computing_lpips), resize(img2, resize_target_pixels_before_computing_lpips)
+        batch_img1, batch_img2 = resize_batch(batch_img1, resize_target_pixels_before_computing_lpips), resize_batch(batch_img2, resize_target_pixels_before_computing_lpips)
 
-    # lpips model requires image to be in range [-1,1]:
-    perceptual_distance = lpips_perceptor((2*img1)-1, (2*img2)-1).mean().item()
+    # LPIPS model requires images to be in range [-1, 1]:
+    perceptual_distances = lpips_perceptor((2 * batch_img1) - 1, (2 * batch_img2) - 1).mean(dim=(1, 2, 3))
 
-    return perceptual_distance
+    return perceptual_distances
 
-def get_uniformly_sized_crops(imgs, target_n_pixels):
+def get_uniformly_sized_crops(img_paths, target_n_pixels):
     """
     Given a list of images:
         - extract the best possible centre crop of same aspect ratio for all images
@@ -92,11 +94,16 @@ def get_uniformly_sized_crops(imgs, target_n_pixels):
     """
 
     # Load images
-    imgs = [load_img(img_data, 'RGB') for img_data in imgs]
-    assert all(imgs), 'Some images were not loaded successfully'
-    imgs = [np.array(img) for img in imgs]
+    print("Loading images...")
+    imgs = []
+    for path in tqdm(img_paths):
+        try:
+            imgs.append(np.array(load_img(path, 'RGB')))
+        except:
+            print(f"Error loading image: {path}")
     
     # Get center crops at same aspect ratio
+    print("Creating center crops at same aspect ratio...")
     aspect_ratios = [img.shape[1] / img.shape[0] for img in imgs]
     final_aspect_ratio = np.mean(aspect_ratios)
     crops = [get_centre_crop(img, final_aspect_ratio) for img in imgs]
@@ -107,8 +114,10 @@ def get_uniformly_sized_crops(imgs, target_n_pixels):
     final_h, final_w = int(final_h), int(final_w)
 
     # Resize images
-    resized_imgs = [Image.fromarray(img) for img in crops]
-    resized_imgs = [img.resize((final_w, final_h), Image.LANCZOS) for img in resized_imgs]    
+    print("Resizing images...")
+    resized_imgs = []
+    for img in tqdm(crops):
+        resized_imgs.append(Image.fromarray(img).resize((final_w, final_h), Image.LANCZOS))   
     
     return resized_imgs
 
@@ -117,10 +126,11 @@ def get_uniformly_sized_crops(imgs, target_n_pixels):
 
 def load_images(directory, target_size):
     images, image_paths = [], []
-    for filename in tqdm(os.listdir(directory)):
+    for filename in os.listdir(directory):
         if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             image_paths.append(os.path.join(directory, filename))
     
+    print("Loading and cropping all images to a uniform size...")
     images = get_uniformly_sized_crops(image_paths, target_size)
 
     # convert the images to tensors
@@ -129,20 +139,44 @@ def load_images(directory, target_size):
     print(f"Loaded {len(images)} images from {directory}")
     return list(zip(image_paths, image_tensors))
 
-def compute_pairwise_lpips(image_tensors):
+
+def compute_pairwise_lpips(image_tensors, batch_size=32):
     pairwise_distances = {}
     num_combinations = len(image_tensors) * (len(image_tensors) - 1) // 2
     progress_bar = tqdm(total=num_combinations, desc="Computing pairwise LPIPS")
+    
+    # Create a list of image pairs
+    image_pairs = list(itertools.combinations(image_tensors, 2))
+    
+    # Calculate the number of batches
+    num_batches = len(image_pairs) // batch_size + (1 if len(image_pairs) % batch_size != 0 else 0)
+    
+    for batch_idx in range(num_batches):
+        # Create batches of image pairs
+        start_idx = batch_idx * batch_size
+        end_idx = min((batch_idx + 1) * batch_size, len(image_pairs))
+        batch_image_pairs = image_pairs[start_idx:end_idx]
+        
+        # Create tensor batches
+        img1_batch = torch.stack([img1[1] for img1, img2 in batch_image_pairs], dim=0).to(device)
+        img2_batch = torch.stack([img2[1] for img1, img2 in batch_image_pairs], dim=0).to(device)
 
-    # This loop is a bit slow, but it avoids going OOM for large img sets
-    for img1, img2 in itertools.combinations(image_tensors, 2):
-        dist = perceptual_distance(img1[1].to(device), img2[1].to(device))
-        pairwise_distances[(img1[0], img2[0])] = dist
-        pairwise_distances[(img2[0], img1[0])] = dist
-        progress_bar.update(1)
+        if len(batch_image_pairs) > 1:
+            img1_batch = img1_batch.squeeze()
+            img2_batch = img2_batch.squeeze()
+        
+        # Compute perceptual distances for the batch
+        dists_batch = perceptual_distance(img1_batch, img2_batch)
+        
+        # Update the pairwise_distances dictionary
+        for (img1, img2), dist in zip(batch_image_pairs, dists_batch):
+            pairwise_distances[(img1[0], img2[0])] = dist.item()
+            pairwise_distances[(img2[0], img1[0])] = dist.item()
+            progress_bar.update(1)
 
     progress_bar.close()
     return pairwise_distances
+
 
 def create_distance_matrix(pairwise_distances, filenames):
     num_images = len(filenames)
@@ -153,8 +187,9 @@ def create_distance_matrix(pairwise_distances, filenames):
                 distance_matrix[i][j] = pairwise_distances[(img1, img2)]
     return distance_matrix
 
-def main(directory):
-    paths_and_tensors = load_images(directory, args.target_n_pixels)
+@torch.no_grad()
+def main(args):
+    paths_and_tensors = load_images(args.directory, args.target_n_pixels)
     filenames = [t[0] for t in paths_and_tensors]
 
     print(f"Computing pairwise perceptual distances for {len(filenames)} images. This may take a while..")
@@ -169,7 +204,7 @@ def main(directory):
     path = [filenames[idx] for idx in path_indices]
     print(f"Finished solving TSP in {time.time() - start_time:.2f} seconds")
 
-    outdir = os.path.join(directory, "reordered")
+    outdir = os.path.join(args.directory, "reordered")
     os.makedirs(outdir, exist_ok=True)
 
     print(f"Saving optimal visual walkthrough to {outdir}")
@@ -210,12 +245,11 @@ if __name__ == "__main__":
     
     '''
 
-    import argparse
     parser = argparse.ArgumentParser(description="Compute shortest visual path through images in a directory")
     parser.add_argument("directory", type=str, help="Directory containing images")
-    parser.add_argument("--optim_steps", type=int, default=20, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
+    parser.add_argument("--optim_steps", type=int, default=100, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
     parser.add_argument("--image_extensions", type=str, default=".jpg,.png,.jpeg", help="Comma separated list of image extensions to consider")
     parser.add_argument("--copy_metadata_files", action="store_true", help="If set, will copy any metadata files (e.g. .json) to the output directory")
-    parser.add_argument("--target_n_pixels", type=int, default=1024*1024, help="Target number of pixels for output images (script will resize and crop images)")
+    parser.add_argument("--target_n_pixels", type=int, default=768*768, help="Target number of pixels for output images (script will resize and crop images)")
     args = parser.parse_args()
-    main(args.directory)
+    main(args)
