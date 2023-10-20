@@ -50,9 +50,16 @@ def get_centre_crop(img, aspect_ratio):
 
 @torch.no_grad()
 def resize_batch(images, target_w):
-    b,c,h,w = images.shape
-    target_h = int(target_w * h / w)
-    return F.interpolate(images, size=(target_h, target_w), mode='bilinear', align_corners=False)
+    try:
+        if len(images.shape) == 5:
+            images = images[:,0,:,:,:]
+            print(images.shape)
+        b,c,h,w = images.shape
+        target_h = int(target_w * h / w)
+        return F.interpolate(images, size=(target_h, target_w), mode='bilinear', align_corners=False)
+    except:
+        print(f"Error resizing batch of images: {images.shape}")
+        return None
 
 
 def prep_pt_img_for_clip(pt_img, clip_preprocessor):
@@ -252,6 +259,6 @@ if __name__ == "__main__":
     parser.add_argument("--optim_steps", type=int, default=1000, help="Number of tsp optimisation steps to run (will try to optimize the greedy tsp solution)")
     parser.add_argument("--image_extensions", type=str, default=".jpg,.png,.jpeg", help="Comma separated list of image extensions to consider")
     parser.add_argument("--copy_metadata_files", action="store_true", help="If set, will copy any metadata files (e.g. .json) to the output directory")
-    parser.add_argument("--target_n_pixels", type=int, default=768*768, help="Target number of pixels for output images (script will resize and crop images)")
+    parser.add_argument("--target_n_pixels", type=int, default=1024*1024, help="Target number of pixels for output images (script will resize and crop images)")
     args = parser.parse_args()
     main(args)
