@@ -52,14 +52,16 @@ def get_centre_crop(img, aspect_ratio):
 def resize_batch(images, target_w):
     try:
         if len(images.shape) == 5:
-            images = images[:,0,:,:,:]
-            print(images.shape)
+            images = images.squeeze()
+
+        if len(images.shape) == 3:
+            images = images.unsqueeze(0)
+
         b,c,h,w = images.shape
         target_h = int(target_w * h / w)
         return F.interpolate(images, size=(target_h, target_w), mode='bilinear', align_corners=False)
     except:
-        print(f"Error resizing batch of images: {images.shape}")
-        return None
+        raise(f"Error resizing batch of images: {images.shape}")
 
 
 def prep_pt_img_for_clip(pt_img, clip_preprocessor):
